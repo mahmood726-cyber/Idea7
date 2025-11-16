@@ -155,6 +155,11 @@ class STC(PopulationAdjustmentMethod):
         # Validate inputs
         self._validate_data(ipd_data, aggregate_data, covariates, outcome, treatment)
 
+        # Store IPD data for bootstrap (fixes variance estimation)
+        self._ipd_data_for_bootstrap = ipd_data.copy()
+        self._outcome_for_bootstrap = outcome
+        self._treatment_for_bootstrap = treatment
+
         # Fit outcome model on IPD
         if self.method == 'frequentist':
             self.outcome_model_ = self._fit_outcome_model_frequentist(
@@ -540,7 +545,11 @@ class STC(PopulationAdjustmentMethod):
         outcome_type: str
     ) -> float:
         """
-        Estimate variance using bootstrap.
+        Estimate variance using bootstrap by resampling IPD and refitting model.
+
+        CORRECTED: Now resamples IPD trial data and refits outcome model each time,
+        rather than just resampling target population. This properly accounts for
+        uncertainty in model parameter estimation.
 
         Parameters
         ----------
@@ -556,11 +565,91 @@ class STC(PopulationAdjustmentMethod):
         float
             Standard error
         """
-        n = len(target_data)
+        # Need access to original IPD data - store during fit
+        if not hasattr(self, '_ipd_data_for_bootstrap'):
+            # Fallback: use simpler variance estimate
+            import warnings
+            warnings.warn(
+                "IPD data not available for bootstrap. Using approximation. "
+                "Results may underestimate uncertainty."
+            )
+            return self._bootstrap_variance_target_only(target_data, covariates, outcome_type)
+
+        ipd_data = self._ipd_data_for_bootstrap
+        outcome = self._outcome_for_bootstrap
+        treatment = self._treatment_for_bootstrap
+
+        n_ipd = len(ipd_data)
         effects = []
 
         for _ in range(self.bootstrap_samples):
-            # Resample
+            try:
+                # Resample IPD trial data
+                boot_idx = np.random.choice(n_ipd, size=n_ipd, replace=True)
+                ipd_boot = ipd_data.iloc[boot_idx].reset_index(drop=True)
+
+                # Refit outcome model on bootstrap IPD sample
+                boot_model = self._fit_outcome_model_frequentist(
+                    ipd_boot, covariates, outcome, treatment, outcome_type
+                )
+
+                # Predict on target population using bootstrap model
+                X_target = target_data[covariates].values
+                X_target_scaled = self.scaler_.transform(X_target)
+                n_target = len(target_data)
+
+                if self.include_interaction:
+                    X_trt1 = np.hstack([
+                        X_target_scaled,
+                        np.ones((n_target, 1)),
+                        X_target_scaled
+                    ])
+                    X_trt0 = np.hstack([
+                        X_target_scaled,
+                        np.zeros((n_target, 1)),
+                        np.zeros_like(X_target_scaled)
+                    ])
+                else:
+                    X_trt1 = np.hstack([X_target_scaled, np.ones((n_target, 1))])
+                    X_trt0 = np.hstack([X_target_scaled, np.zeros((n_target, 1))])
+
+                if outcome_type == 'binary':
+                    y_pred_1 = boot_model.predict_proba(X_trt1)[:, 1]
+                    y_pred_0 = boot_model.predict_proba(X_trt0)[:, 1]
+                else:
+                    y_pred_1 = boot_model.predict(X_trt1)
+                    y_pred_0 = boot_model.predict(X_trt0)
+
+                effects.append(np.mean(y_pred_1 - y_pred_0))
+
+            except:
+                # Skip failed bootstrap samples
+                continue
+
+        if len(effects) < self.bootstrap_samples * 0.5:
+            import warnings
+            warnings.warn(
+                f"Only {len(effects)}/{self.bootstrap_samples} bootstrap samples succeeded. "
+                "Variance estimate may be unreliable."
+            )
+
+        return np.std(effects)
+
+    def _bootstrap_variance_target_only(
+        self,
+        target_data: pd.DataFrame,
+        covariates: List[str],
+        outcome_type: str
+    ) -> float:
+        """
+        Fallback bootstrap that only resamples target (underestimates variance).
+
+        This is the OLD INCORRECT method. Only used if IPD not available.
+        """
+        n = len(target_data)
+        effects = []
+
+        for _ in range(min(self.bootstrap_samples, 200)):  # Reduced for speed
             idx = np.random.choice(n, size=n, replace=True)
             boot_data = target_data.iloc[idx]
 

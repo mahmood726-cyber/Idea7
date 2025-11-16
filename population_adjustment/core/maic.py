@@ -437,7 +437,10 @@ class MAIC(PopulationAdjustmentMethod):
         outcome_type: str
     ) -> Tuple[float, float, Tuple[float, float]]:
         """
-        Estimate weighted treatment effect.
+        Estimate weighted treatment effect with corrected variance.
+
+        Uses bootstrap to account for uncertainty in weight estimation,
+        following Signorovitch et al. (2012) recommendations.
 
         Parameters
         ----------
@@ -465,40 +468,25 @@ class MAIC(PopulationAdjustmentMethod):
         w_norm = weights / np.sum(weights) * n
 
         if outcome_type == 'binary':
-            # Risk difference or log odds ratio
-            # Calculate weighted proportions
+            # Risk difference
             p1 = np.sum(y * trt * w_norm) / np.sum(trt * w_norm)
             p0 = np.sum(y * (1 - trt) * w_norm) / np.sum((1 - trt) * w_norm)
-
-            effect = p1 - p0  # Risk difference
-
-            # Variance using weighted formula
-            n1 = np.sum(trt * w_norm)
-            n0 = np.sum((1 - trt) * w_norm)
-
-            var1 = p1 * (1 - p1) / n1
-            var0 = p0 * (1 - p0) / n0
-
-            std_error = np.sqrt(var1 + var0)
+            effect = p1 - p0
 
         elif outcome_type == 'continuous':
             # Mean difference
             mean1 = np.sum(y * trt * w_norm) / np.sum(trt * w_norm)
             mean0 = np.sum(y * (1 - trt) * w_norm) / np.sum((1 - trt) * w_norm)
-
             effect = mean1 - mean0
-
-            # Weighted variance
-            var1 = np.sum(((y - mean1)**2) * trt * w_norm) / np.sum(trt * w_norm)
-            var0 = np.sum(((y - mean0)**2) * (1 - trt) * w_norm) / np.sum((1 - trt) * w_norm)
-
-            n1 = np.sum(trt * w_norm)
-            n0 = np.sum((1 - trt) * w_norm)
-
-            std_error = np.sqrt(var1 / n1 + var0 / n0)
 
         else:
             raise ValueError(f"Outcome type '{outcome_type}' not yet implemented")
+
+        # Use bootstrap to estimate variance accounting for weight uncertainty
+        # This is the correct approach per Signorovitch 2012
+        std_error = self._bootstrap_variance_maic(
+            ipd_data, outcome, treatment, outcome_type
+        )
 
         # Confidence interval
         z_alpha = norm.ppf(1 - (1 - self.ci_level) / 2)
@@ -506,6 +494,97 @@ class MAIC(PopulationAdjustmentMethod):
         ci_upper = effect + z_alpha * std_error
 
         return effect, std_error, (ci_lower, ci_upper)
+
+    def _bootstrap_variance_maic(
+        self,
+        ipd_data: pd.DataFrame,
+        outcome: str,
+        treatment: str,
+        outcome_type: str,
+        n_bootstrap: int = 500
+    ) -> float:
+        """
+        Bootstrap variance estimation for MAIC.
+
+        Resamples IPD data, re-estimates weights, and computes effect
+        to properly account for uncertainty in weight estimation.
+
+        Parameters
+        ----------
+        ipd_data : pd.DataFrame
+            IPD data
+        outcome : str
+            Outcome variable
+        treatment : str
+            Treatment variable
+        outcome_type : str
+            Type of outcome
+        n_bootstrap : int
+            Number of bootstrap samples
+
+        Returns
+        -------
+        float
+            Bootstrap standard error
+        """
+        n = len(ipd_data)
+        boot_effects = []
+
+        # Get covariates used in weighting
+        covariates = [col for col in ipd_data.columns
+                     if col not in [outcome, treatment]]
+
+        # Get target statistics (stored during fit)
+        X_ipd = ipd_data[covariates].values
+        scaler = StandardScaler()
+        X_ipd_scaled = scaler.fit_transform(X_ipd)
+
+        # Reconstruct target from current weights
+        w_norm = self.weights_ / np.sum(self.weights_)
+        X_target_scaled = np.sum(X_ipd_scaled * w_norm[:, np.newaxis], axis=0)
+
+        for _ in range(n_bootstrap):
+            # Resample IPD data with replacement
+            boot_idx = np.random.choice(n, size=n, replace=True)
+            boot_data = ipd_data.iloc[boot_idx].reset_index(drop=True)
+
+            try:
+                # Re-estimate weights on bootstrap sample
+                X_boot = boot_data[covariates].values
+                X_boot_scaled = scaler.fit_transform(X_boot)
+
+                # Use same weighting method
+                boot_weights, _ = self._estimate_weights_frequentist(
+                    X_boot_scaled, X_target_scaled
+                )
+
+                # Calculate effect with bootstrap weights
+                y_boot = boot_data[outcome].values
+                trt_boot = boot_data[treatment].values
+                w_boot_norm = boot_weights / np.sum(boot_weights) * n
+
+                if outcome_type == 'binary':
+                    p1 = np.sum(y_boot * trt_boot * w_boot_norm) / np.sum(trt_boot * w_boot_norm)
+                    p0 = np.sum(y_boot * (1 - trt_boot) * w_boot_norm) / np.sum((1 - trt_boot) * w_boot_norm)
+                    boot_effect = p1 - p0
+                else:  # continuous
+                    mean1 = np.sum(y_boot * trt_boot * w_boot_norm) / np.sum(trt_boot * w_boot_norm)
+                    mean0 = np.sum(y_boot * (1 - trt_boot) * w_boot_norm) / np.sum((1 - trt_boot) * w_boot_norm)
+                    boot_effect = mean1 - mean0
+
+                boot_effects.append(boot_effect)
+
+            except:
+                # If bootstrap sample causes issues (e.g., optimization failure), skip
+                continue
+
+        if len(boot_effects) < n_bootstrap * 0.8:
+            warnings.warn(
+                f"Only {len(boot_effects)}/{n_bootstrap} bootstrap samples succeeded. "
+                "Variance estimate may be unreliable."
+            )
+
+        return np.std(boot_effects)
 
     def _calculate_diagnostics(
         self,
