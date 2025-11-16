@@ -403,15 +403,15 @@ def run_single_replication(args):
             )
 
             results['maic_effect'] = maic_result.effect_estimate
-            results['maic_se'] = maic_result.se
+            results['maic_se'] = maic_result.standard_error
             results['maic_ci_lower'] = maic_result.ci_lower
             results['maic_ci_upper'] = maic_result.ci_upper
-            results['maic_ess'] = maic_result.diagnostics.get('ess', np.nan)
+            results['maic_ess'] = maic_result.diagnostics.get('effective_sample_size', np.nan)
             results['maic_max_weight'] = maic_result.diagnostics.get('max_weight', np.nan)
             results['maic_success'] = True
         except Exception as e:
-            # if rep_id == 0:  # Print error for first rep only
-            #     print(f"  MAIC failed: {str(e)[:100]}")
+            if rep_id == 0:  # Print error for first rep only
+                print(f"  MAIC failed: {str(e)[:100]}")
             results['maic_success'] = False
 
         # STC
@@ -427,13 +427,13 @@ def run_single_replication(args):
             )
 
             results['stc_effect'] = stc_result.effect_estimate
-            results['stc_se'] = stc_result.se
+            results['stc_se'] = stc_result.standard_error
             results['stc_ci_lower'] = stc_result.ci_lower
             results['stc_ci_upper'] = stc_result.ci_upper
             results['stc_success'] = True
         except Exception as e:
-            # if rep_id == 0:  # Print error for first rep only
-            #     print(f"  STC failed: {str(e)[:100]}")
+            if rep_id == 0:  # Print error for first rep only
+                print(f"  STC failed: {str(e)[:100]}")
             results['stc_success'] = False
 
         # IOW
@@ -450,7 +450,7 @@ def run_single_replication(args):
 
             combined = pd.concat([trial_subset, target_subset], ignore_index=True)
 
-            iow = InverseOddsWeighting(method='propensity')
+            iow = InverseOddsWeighting()  # Defaults to method='frequentist'
             iow_result = iow.fit(
                 combined_data=combined,
                 trial_indicator='S',
@@ -461,12 +461,14 @@ def run_single_replication(args):
             )
 
             results['iow_effect'] = iow_result.effect_estimate
-            results['iow_se'] = iow_result.se
+            results['iow_se'] = iow_result.standard_error
             results['iow_ci_lower'] = iow_result.ci_lower
             results['iow_ci_upper'] = iow_result.ci_upper
-            results['iow_ess'] = iow_result.diagnostics.get('ess', np.nan)
+            results['iow_ess'] = iow_result.diagnostics.get('effective_sample_size', np.nan)
             results['iow_success'] = True
         except Exception as e:
+            if rep_id == 0:  # Print error for first rep only
+                print(f"  IOW failed: {str(e)[:100]}")
             results['iow_success'] = False
 
         return results
