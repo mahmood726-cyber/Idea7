@@ -418,11 +418,18 @@ Based on empirical + simulation evidence:
 - Transparent, reproducible
 
 **Limitations:**
-- HTA database limited to 12 cases (all published work)
-- Simulations don't capture all real-world complexity
-- Binary/continuous outcomes only (time-to-event future work)
-- Single-trial setting (network meta-analysis future work)
-- No validation in prospective HTA submissions yet
+
+*Empirical validation sample size:* Our HTA database comprises 12 published cases, which, while representing the largest systematic collection of real population adjustment applications to date, limits the statistical power for detecting predictors of method choice. The 75% agreement rate between automated selector and actual HTA decisions should be interpreted cautiously given this sample size. However, these cases represent genuine real-world applications spanning diverse therapeutic areas (oncology, diabetes, infectious disease) and regulatory contexts (NICE, FDA), providing valuable external validity. Expanding this database to 20-30 cases would strengthen the empirical foundation, though such cases remain scarce in the published literature due to confidentiality restrictions on HTA submissions.
+
+*Simulation scope:* Our extended simulation study focused on binary and continuous outcomes, which represent the majority of population adjustment applications. However, time-to-event outcomes (common in oncology HTAs) were not included in the simulation scenarios. While the automated selector's decision rules (based on imbalance severity and sample size) likely generalize to survival outcomes, explicit validation for this outcome type is needed. Additionally, simulations assumed correctly specified models and no unmeasured confounding - violations of these assumptions in practice could affect method performance and optimal selection.
+
+*Single-trial indirect comparisons:* The current implementation addresses the single-trial indirect comparison setting where one IPD trial is compared to one aggregate comparator. Many HTAs involve network meta-analysis with multiple trials and treatment comparisons. While population adjustment methods can be embedded within network meta-analysis frameworks (e.g., Phillippo et al. 2020), our automated selector does not currently address this more complex setting. Extension to network settings would require additional decision criteria regarding which trials to adjust and how to synthesize adjusted estimates.
+
+*Prospective validation:* While we validated the algorithm against historical HTA cases where the method choice and results are known, true prospective validation requires application in real-time submissions before analysts select a method. Such validation would assess whether following the algorithm's recommendations leads to better decision-making and more consistent method selection across analysts. This represents an important next step but was beyond the scope of the current methodological development.
+
+*Geographic and regulatory context:* Our HTA cases derive primarily from NICE technology appraisals and published academic studies. Regulatory preferences and conventions may differ across jurisdictions (e.g., EUnetHTA, PBAC, CADTH). While the fundamental statistical principles underlying method selection are universal, specific threshold values (e.g., SMD cutoffs) may benefit from region-specific calibration.
+
+*Publication bias:* Our empirical database relies on published HTA submissions and case studies. Unsuccessful submissions or those not published due to commercial sensitivity may differ systematically from our sample (e.g., more extreme imbalance, smaller samples). This potential publication bias could affect the generalizability of our empirically-derived guidelines.
 
 ### 4.5 Future Research
 
