@@ -1,24 +1,25 @@
-# Target Population Meta-Analysis: Novel Methods for Population Adjustment
+# Population Adjustment Methods for Health Technology Assessment
 
-A comprehensive Python package implementing state-of-the-art population adjustment methods for target population meta-analysis, with novel Bayesian extensions.
+A Python implementation of established population adjustment methods for target population meta-analysis, following NICE guidelines and published methodologies.
 
 ## Overview
 
-This package implements three major population adjustment methods for health technology assessment (HTA) and meta-analysis:
+This package implements three validated population adjustment methods for health technology assessment (HTA) and indirect treatment comparisons:
 
-1. **Inverse Odds Weighting (IOW)** - Population adjustment using propensity score weighting
-2. **Matching-Adjusted Indirect Comparison (MAIC)** - Weighting individual patient data to match aggregate data
-3. **Simulated Treatment Comparison (STC)** - Outcome regression-based population adjustment
+1. **Matching-Adjusted Indirect Comparison (MAIC)** - Entropy minimization with moment matching
+2. **Simulated Treatment Comparison (STC)** - Outcome regression with G-computation
+3. **Inverse Odds Weighting (IOW)** - Propensity score weighting with doubly-robust estimation
 
-## Novel Contributions
+## Scope and Contributions
 
-This implementation extends existing methods (Phillippo 2020, Remiro-Azócar 2020) with:
+This implementation provides:
 
-- **Unified Bayesian Framework**: Full Bayesian implementations of all three methods with uncertainty propagation
-- **Doubly-Robust Estimators**: Combined propensity score and outcome regression approaches
-- **Adaptive Weighting**: Novel variance-minimizing weight calibration
-- **Comprehensive Diagnostics**: Balance metrics, effective sample size, sensitivity analyses
-- **Bootstrap and Bayesian Uncertainty**: Multiple approaches to confidence/credible intervals
+- **Correct Implementations**: Methods following published algorithms (Phillippo 2020, Signorovitch 2012, Remiro-Azócar 2020)
+- **Proper Variance Estimation**: Bootstrap procedures accounting for two-stage estimation uncertainty
+- **Doubly-Robust Estimators**: IOW with outcome regression augmentation (Bang & Robins 2005)
+- **Comprehensive Diagnostics**: ESS, SMD, propensity overlap, weight distributions
+- **Sensitivity Analysis**: E-values and tipping point analysis (VanderWeele & Ding 2017)
+- **Validation**: Simulation studies, R package comparisons, correctness tests
 
 ## Installation
 
@@ -35,78 +36,81 @@ pip install -e ".[dev]"
 ## Quick Start
 
 ```python
-from population_adjustment import MAIC, STC, InverseOddsWeighting
+from population_adjustment import MAIC, STC, IOW
 import pandas as pd
 
-# Load your IPD (Individual Patient Data) and aggregate data
-ipd = pd.read_csv('trial_ipd.csv')
-aggregate_data = pd.read_csv('target_population.csv')
+# Load your data
+# trial_data: IPD from your trial (with outcome and treatment)
+# target_data: Target population characteristics (covariates only)
+trial_data = pd.read_csv('trial_ipd.csv')
+target_data = pd.read_csv('target_population.csv')
 
 # Matching-Adjusted Indirect Comparison
-maic = MAIC(method='bayesian')
+maic = MAIC()
 result = maic.fit(
-    ipd_data=ipd,
-    aggregate_data=aggregate_data,
+    trial_data=trial_data,
+    target_data=target_data,
     covariates=['age', 'sex', 'baseline_severity'],
-    outcome='response',
-    treatment='treatment_arm'
+    outcome='outcome',
+    treatment='treatment',
+    outcome_type='binary'
 )
 
-print(f"Adjusted Treatment Effect: {result.effect_estimate:.3f}")
-print(f"95% CI: [{result.ci_lower:.3f}, {result.ci_upper:.3f}]")
+print(f"Treatment Effect (Target Population): {result.effect_estimate:.3f}")
+print(f"95% CI: ({result.ci_lower:.3f}, {result.ci_upper:.3f})")
+print(f"Effective Sample Size: {result.diagnostics['ess']:.1f}")
 
-# Visualize balance
-result.plot_balance()
+# Access diagnostics
+print(f"SMD after adjustment: {result.diagnostics['smd_after']}")
 ```
 
 ## Methods
 
 ### 1. Matching-Adjusted Indirect Comparison (MAIC)
 
-MAIC adjusts IPD from one trial to match the population characteristics of another trial or target population using propensity score weighting.
+MAIC reweights IPD to match target population covariate distributions using entropy minimization.
 
-**Features:**
-- Standard MAIC (moment matching)
-- Bayesian MAIC with prior regularization
-- Entropy balancing for stable weights
-- Effective sample size diagnostics
+**Implementation:**
+- Moment matching via constrained optimization (Signorovitch 2012)
+- Bootstrap variance estimation accounting for weight uncertainty
+- Effective sample size and balance diagnostics
+- Supports binary and continuous outcomes
 
 ### 2. Simulated Treatment Comparison (STC)
 
-STC uses outcome regression to predict counterfactual outcomes in the target population.
+STC predicts counterfactual outcomes in the target population using outcome regression.
 
-**Features:**
-- Frequentist regression-based STC
-- Bayesian hierarchical outcome models
-- Multiple outcome types (binary, continuous, time-to-event)
-- G-computation for marginal effects
+**Implementation:**
+- Outcome regression with treatment-covariate interactions (Phillippo 2020)
+- G-computation for marginal treatment effects
+- Bootstrap resampling of IPD trial data with model refitting
+- Supports binary and continuous outcomes
 
 ### 3. Inverse Odds Weighting (IOW)
 
-IOW combines propensity scores with inverse odds of trial participation for population adjustment.
+IOW uses propensity scores for trial membership to weight IPD toward target population.
 
-**Features:**
-- Propensity score estimation (logistic, boosting, random forest)
-- Stabilized weights for variance reduction
-- Doubly-robust estimation
-- Cross-validation for model selection
+**Implementation:**
+- Propensity score estimation via logistic regression
+- Inverse odds weighting with stabilization
+- Doubly-robust estimation (Bang & Robins 2005)
+- Propensity overlap diagnostics
 
 ## Documentation
 
 See the [docs/](docs/) directory for:
-- [Methods Overview](docs/methods.md) - Detailed mathematical descriptions
-- [API Reference](docs/api.md) - Complete API documentation
-- [Examples](docs/examples.md) - Usage examples and case studies
-- [User Guide](docs/guide.md) - Step-by-step tutorials
+- [REFERENCES.md](docs/REFERENCES.md) - Comprehensive bibliography (67 references)
+- [METHOD_SELECTION_GUIDE.md](docs/METHOD_SELECTION_GUIDE.md) - Decision trees and practical guidance
+- API documentation in docstrings
 
-## Examples
+## Validation and Examples
 
-See the [examples/](examples/) and [notebooks/](notebooks/) directories for comprehensive examples:
+This package includes:
 
-- Basic population adjustment workflows
-- Indirect treatment comparisons
-- Sensitivity analyses
-- Simulation studies replicating published results
+- **Simulation Studies** ([simulations/](simulations/)) - 6 scenarios × 100 replications showing bias, RMSE, coverage
+- **R Validation** ([validation/](validation/)) - Comparison against R MAIC package
+- **Case Study** ([examples/](examples/)) - NICE TA174 diabetes example with full workflow
+- **Correctness Tests** ([tests/](tests/)) - Tests verifying methods recover known ground truth
 
 ## Requirements
 
@@ -116,7 +120,25 @@ See the [examples/](examples/) and [notebooks/](notebooks/) directories for comp
 - Pandas ≥ 1.3
 - Statsmodels ≥ 0.13
 - Scikit-learn ≥ 1.0
-- PyMC ≥ 5.0 (for Bayesian methods)
+- Matplotlib ≥ 3.5 (for visualizations)
+- Seaborn ≥ 0.11 (for visualizations)
+
+## Current Status and Limitations
+
+**Status:** Research implementation (Version 0.1.0)
+
+This package provides correct implementations of established methods with proper validation. Current limitations:
+
+- **Frequentist only**: Bayesian implementations are planned but not yet available
+- **Limited outcome types**: Binary and continuous outcomes supported; time-to-event planned
+- **Single trial**: Currently handles one IPD trial; multi-trial extensions planned
+- **Validation scope**: R validation framework created but requires rpy2 setup
+
+**Use Cases:**
+- ✅ HTA submissions requiring population adjustment (NICE, EUnetHTA)
+- ✅ Research comparing population adjustment methods
+- ✅ Educational/teaching purposes
+- ⚠ Production use: Recommend cross-validating against R packages
 
 ## Citation
 
@@ -124,12 +146,15 @@ If you use this package in your research, please cite:
 
 ```bibtex
 @software{population_adjustment2025,
-  title={Target Population Meta-Analysis: Novel Methods for Population Adjustment},
+  title={Population Adjustment Methods for Health Technology Assessment},
   author={[Your Name]},
   year={2025},
+  version={0.1.0},
   url={https://github.com/mahmood726-cyber/Idea7}
 }
 ```
+
+And cite the original methodological papers (see [REFERENCES.md](docs/REFERENCES.md)).
 
 ## References
 

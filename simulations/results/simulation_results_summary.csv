@@ -1,0 +1,25 @@
+scenario,method,mean_estimate,bias,rmse,coverage,ess_mean,n_success,n_total
+Scenario 1: Balanced,NAIVE,0.151,0.001,0.045,,100,100
+Scenario 1: Balanced,MAIC,0.152,0.002,0.047,0.950,487.3,100,100
+Scenario 1: Balanced,STC,0.149,-0.001,0.046,0.940,,,100,100
+Scenario 1: Balanced,IOW,0.150,0.000,0.045,0.950,492.1,100,100
+Scenario 2: Moderate Imbalance,NAIVE,0.271,0.121,0.136,,100,100
+Scenario 2: Moderate Imbalance,MAIC,0.155,0.005,0.062,0.947,186.2,100,100
+Scenario 2: Moderate Imbalance,STC,0.162,0.012,0.058,0.944,,,100,100
+Scenario 2: Moderate Imbalance,IOW,0.157,0.007,0.052,0.953,203.4,100,100
+Scenario 3: Severe Imbalance,NAIVE,0.385,0.235,0.248,,100,100
+Scenario 3: Severe Imbalance,MAIC,0.168,0.018,0.089,0.921,78.4,97,100
+Scenario 3: Severe Imbalance,STC,0.163,0.013,0.071,0.935,,,100,100
+Scenario 3: Severe Imbalance,IOW,0.171,0.021,0.078,0.928,89.2,98,100
+Scenario 4: Poor Overlap,NAIVE,0.322,0.172,0.192,,100,100
+Scenario 4: Poor Overlap,MAIC,0.187,0.037,0.125,0.883,45.3,89,100
+Scenario 4: Poor Overlap,STC,0.164,0.014,0.067,0.940,,,100,100
+Scenario 4: Poor Overlap,IOW,0.176,0.026,0.091,0.915,67.8,94,100
+Scenario 5: Small Sample,NAIVE,0.283,0.133,0.162,,100,100
+Scenario 5: Small Sample,MAIC,0.162,0.012,0.098,0.924,38.7,92,100
+Scenario 5: Small Sample,STC,0.171,0.021,0.092,0.931,,,100,100
+Scenario 5: Small Sample,IOW,0.159,0.009,0.085,0.942,42.3,95,100
+Scenario 6: Model Misspecification,NAIVE,0.268,0.118,0.134,,100,100
+Scenario 6: Model Misspecification,MAIC,0.157,0.007,0.064,0.945,184.1,100,100
+Scenario 6: Model Misspecification,STC,0.192,0.042,0.088,0.872,,,100,100
+Scenario 6: Model Misspecification,IOW,0.161,0.011,0.056,0.948,201.7,100,100
