@@ -34,7 +34,7 @@ warnings.filterwarnings('ignore')
 # Add parent directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from population_adjustment import MAIC, STC, IOW
+from population_adjustment import MAIC, STC, InverseOddsWeighting
 
 
 # SCENARIO DEFINITIONS
@@ -357,9 +357,16 @@ def run_single_replication(args):
 
     try:
         # Generate data
-        trial_data, target_data, true_effect = generate_data(scenario, seed=rep_id)
+        trial_data, target_data_individual, true_effect = generate_data(scenario, seed=rep_id)
 
+        # MAIC and STC need aggregate target data (means)
+        # IOW needs individual-level target data
         covariates = [f'X{i}' for i in range(scenario['n_covariates'])]
+        target_data_aggregate = pd.DataFrame(
+            target_data_individual[covariates].mean().to_dict(),
+            index=[0]
+        )
+
         outcome_type = scenario['outcome_type']
 
         results = {
@@ -387,8 +394,8 @@ def run_single_replication(args):
         try:
             maic = MAIC()
             maic_result = maic.fit(
-                trial_data=trial_data,
-                target_data=target_data,
+                ipd_data=trial_data,
+                aggregate_data=target_data_aggregate,
                 covariates=covariates,
                 outcome='outcome',
                 treatment='treatment',
@@ -402,15 +409,17 @@ def run_single_replication(args):
             results['maic_ess'] = maic_result.diagnostics.get('ess', np.nan)
             results['maic_max_weight'] = maic_result.diagnostics.get('max_weight', np.nan)
             results['maic_success'] = True
-        except:
+        except Exception as e:
+            # if rep_id == 0:  # Print error for first rep only
+            #     print(f"  MAIC failed: {str(e)[:100]}")
             results['maic_success'] = False
 
         # STC
         try:
             stc = STC(bootstrap_samples=200)  # Reduced for speed
             stc_result = stc.fit(
-                trial_data=trial_data,
-                target_data=target_data,
+                ipd_data=trial_data,
+                aggregate_data=target_data_aggregate,
                 covariates=covariates,
                 outcome='outcome',
                 treatment='treatment',
@@ -422,15 +431,29 @@ def run_single_replication(args):
             results['stc_ci_lower'] = stc_result.ci_lower
             results['stc_ci_upper'] = stc_result.ci_upper
             results['stc_success'] = True
-        except:
+        except Exception as e:
+            # if rep_id == 0:  # Print error for first rep only
+            #     print(f"  STC failed: {str(e)[:100]}")
             results['stc_success'] = False
 
         # IOW
         try:
-            iow = IOW(method='propensity')
+            # IOW requires combined data with trial indicator
+            trial_subset = trial_data.copy()
+            trial_subset['S'] = 1
+
+            # For target, use individual-level data (IOW expects this)
+            target_subset = target_data_individual.copy()
+            target_subset['S'] = 0
+            target_subset['outcome'] = np.nan  # No outcome for target
+            target_subset['treatment'] = np.nan  # No treatment for target
+
+            combined = pd.concat([trial_subset, target_subset], ignore_index=True)
+
+            iow = InverseOddsWeighting(method='propensity')
             iow_result = iow.fit(
-                trial_data=trial_data,
-                target_data=target_data,
+                combined_data=combined,
+                trial_indicator='S',
                 covariates=covariates,
                 outcome='outcome',
                 treatment='treatment',
@@ -443,7 +466,7 @@ def run_single_replication(args):
             results['iow_ci_upper'] = iow_result.ci_upper
             results['iow_ess'] = iow_result.diagnostics.get('ess', np.nan)
             results['iow_success'] = True
-        except:
+        except Exception as e:
             results['iow_success'] = False
 
         return results
